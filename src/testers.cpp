@@ -128,7 +128,6 @@ ValueTester::ValueTester(TesterParams params, ValueTester::Mode mode)
         break;
     case IsUpperMode:
         break;
-
     }
 }
 
@@ -337,6 +336,7 @@ UserDefinedTester::UserDefinedTester(std::string testerName, TesterParams params
     ParseParams({{"*args"}, {"**kwargs"}}, params);
     m_callParams.kwParams = m_args.extraKwArgs;
     m_callParams.posParams = m_args.extraPosArgs;
+    m_callParams.posParamsStarred = m_args.extraPosArgsStarred;
 }
 
 bool UserDefinedTester::Test(const InternalValue& baseVal, RenderContext& context)
@@ -355,8 +355,12 @@ bool UserDefinedTester::Test(const InternalValue& baseVal, RenderContext& contex
     callParams.kwParams = std::move(tmpCallParams.kwParams);
     callParams.posParams.reserve(tmpCallParams.posParams.size() + 1);
     callParams.posParams.push_back(baseVal);
+    callParams.posParamsStarred.push_back(false);
     for (auto& p : tmpCallParams.posParams)
+    {
         callParams.posParams.push_back(std::move(p));
+        callParams.posParamsStarred.push_back(false);
+    }
 
     InternalValue result;
     if (callable->GetType() != Callable::Type::Expression)

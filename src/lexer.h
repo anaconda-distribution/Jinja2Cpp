@@ -37,6 +37,7 @@ struct Token
         RCrlBracket = '}',
         Assign = '=',
         Comma = ',',
+        Dot = '.',
         Eof = 256,
 
         // General
@@ -54,6 +55,8 @@ struct Token
         DashDash,
         MulMul,
         DivDiv,
+        ShiftLeft,
+        ShiftRight,
         True,
         False,
         None,
@@ -276,8 +279,9 @@ public:
     {
         if (m_state.m_cur == m_state.m_end)
             return EofToken();
-
-        return *m_state.m_cur ++;
+        const Token &r = *m_state.m_cur;
+        m_state.m_cur ++;
+        return r;
     }
 
     void EatToken()
@@ -286,18 +290,27 @@ public:
             ++ m_state.m_cur;
     }
 
-    void ReturnToken()
-    {
-        if (m_state.m_cur != m_state.m_begin)
-            -- m_state.m_cur;
-    }
-
     const Token& PeekNextToken() const
     {
         if (m_state.m_cur == m_state.m_end)
             return EofToken();
 
         return *m_state.m_cur;
+    }
+
+    const Token & PeekNextNextToken()
+    {
+      if (m_state.m_cur == m_state.m_end)
+        return EofToken();
+      ++ m_state.m_cur;
+      if (m_state.m_cur == m_state.m_end)
+      {
+        -- m_state.m_cur;
+        return EofToken();
+      }
+      const Token &r = *m_state.m_cur;
+      -- m_state.m_cur;
+      return r;
     }
 
     bool EatIfEqual(char type, Token* tok = nullptr)

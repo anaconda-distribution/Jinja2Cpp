@@ -91,7 +91,7 @@ struct UrlStringEncoder : public StringEncoder<UrlStringEncoder>
         EncodeStyle encStyle = None;
         switch (ch)
         {
-        case ' ':
+        case ' ': case '\t':
             fn('+');
             return;
         case '+': case '\"': case '%': case '-':

@@ -69,35 +69,10 @@ namespace lexertk
 
         auto length() const {return end - start;}
         auto offset(CharT* from) const {return start - from;}
-        auto operator[] (size_t idx) const {return start[idx];}
+        auto operator[] (size_t idx) const {return idx < size_t(length()) ? start[idx] : 0;}
     };
    namespace details
    {
-#if 0
-      inline bool is_whitespace(const char c)
-      {
-         return (' '  == c) || ('\n' == c) ||
-                ('\r' == c) || ('\t' == c) ||
-                ('\b' == c) || ('\v' == c) ||
-                ('\f' == c) ;
-      }
-
-
-      inline bool is_letter(const char c)
-      {
-         return (('a' <= c) && (c <= 'z')) || (('A' <= c) && (c <= 'Z'));
-      }
-
-      inline bool is_digit(const char c)
-      {
-         return ('0' <= c) && (c <= '9');
-      }
-
-      inline bool is_letter_or_digit(const char c)
-      {
-         return is_letter(c) || is_digit(c);
-      }
-#endif
       template<typename CharT>
       struct lexer_traits
       {
@@ -109,7 +84,7 @@ namespace lexertk
 
           static bool is_whitespace(const CharT c)
           {
-              return std::isspace(c, get_locale());
+              return std::isspace(c, get_locale()) || ((unsigned char) c) >= 0xa0u;
           }
           static bool is_letter(const CharT c)
           {
@@ -472,16 +447,18 @@ namespace lexertk
          eof_token_.set_operator(token_t::e_eof,s_end_,s_end_,base_itr_);
          token_list_.clear();
 
+         if (!is_end(s_itr_))
+         {
+            scan_token();
+            if (empty())
+               return true;
+         }
          while (!is_end(s_itr_))
          {
             scan_token();
 
-            if (token_list_.empty())
-               return true;
-            else if (token_list_.back().is_error())
-            {
+            if (token_list_.back().is_error())
                return false;
-            }
          }
          return true;
       }
@@ -516,7 +493,9 @@ namespace lexertk
       {
          if (token_list_.end() != token_itr_)
          {
-            return *token_itr_++;
+            token_t &r = *token_itr_;
+            token_itr_++;
+            return r;
          }
          else
             return eof_token_;
@@ -557,7 +536,7 @@ namespace lexertk
       {
          using string = std::basic_string<CharT>;
          if (finished())
-            return string();
+            return string("");
          else if (token_list_.begin() != token_itr_)
             return string(base_itr_ + (token_itr_ - 1)->position,s_end_);
          else
@@ -583,10 +562,8 @@ namespace lexertk
          skip_whitespace();
 
          if (is_end(s_itr_))
-         {
             return;
-         }
-         else if (traits::is_operator_char(*s_itr_))
+         if (traits::is_operator_char(*s_itr_))
          {
             scan_operator();
             return;
@@ -609,7 +586,7 @@ namespace lexertk
          else
          {
             token_t t;
-            t.set_error(token::e_error,s_itr_,s_itr_ + 2,base_itr_);
+            t.set_error(token::e_error,s_itr_,s_itr_ + 1,base_itr_);
             token_list_.push_back(t);
             ++s_itr_;
          }
@@ -705,7 +682,7 @@ namespace lexertk
          bool post_e_digit_found = false;
          token_t t;
 
-         if ('.' == *begin && !is_end(begin + 1) && !traits::is_digit(begin[1]))
+         if (!is_end(s_itr_) && '.' == *begin && !is_end(begin + 1) && !traits::is_digit(begin[1]))
          {
              scan_operator();
              return;
@@ -730,8 +707,6 @@ namespace lexertk
             }
             else if (traits::imatch('e',(*s_itr_)))
             {
-               const CharT& c = *(s_itr_ + 1);
-
                if (is_end(s_itr_ + 1))
                {
                   t.set_error(token::e_err_number,begin,s_itr_,base_itr_);
@@ -739,11 +714,12 @@ namespace lexertk
 
                   return;
                }
-               else if (
-                        ('+' != c) &&
-                        ('-' != c) &&
-                        !traits::is_digit(c)
-                       )
+               const CharT& c = *(s_itr_ + 1);
+               if (
+                   ('+' != c) &&
+                   ('-' != c) &&
+                   !traits::is_digit(c)
+                  )
                {
                   t.set_error(token::e_err_number,begin,s_itr_,base_itr_);
                   token_list_.push_back(t);
@@ -793,9 +769,6 @@ namespace lexertk
 
       inline void scan_string()
       {
-         CharT endChar = *s_itr_;
-         const CharT* begin = s_itr_ + 1;
-
          token_t t;
 
          if (std::distance(s_itr_,s_end_) < 2)
@@ -805,44 +778,36 @@ namespace lexertk
 
             return;
          }
+         CharT endChar = *s_itr_;
+         const CharT* begin = s_itr_ + 1;
 
+         // consume initial character
          ++s_itr_;
 
-         bool escaped       = false;
+         bool escaped = false;
 
          while (!is_end(s_itr_))
          {
-            if (!escaped && ('\\' == *s_itr_))
-            {
-               escaped       = true;
-               ++s_itr_;
-
-               continue;
-            }
-            else if (!escaped)
-            {
-               if (endChar == *s_itr_)
-                  break;
-            }
-            else
-               escaped = false;
-
+            if (escaped)
+              escaped = false;
+            else if ('\\' == *s_itr_)
+              escaped = true;
+            else if (endChar == *s_itr_)
+               break;
             ++s_itr_;
          }
 
          if (is_end(s_itr_))
          {
             t.set_error(token::e_err_string,begin,s_itr_,base_itr_);
-            token_list_.push_back(t);
-
-            return;
          }
-
-         t.set_string(begin,s_itr_,base_itr_);
+         else
+         {
+            t.set_string(begin,s_itr_,base_itr_);
+            // consume terminator
+            ++s_itr_;
+         }
          token_list_.push_back(t);
-         ++s_itr_;
-
-         return;
       }
 
    private:

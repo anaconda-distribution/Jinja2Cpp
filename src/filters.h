@@ -14,6 +14,7 @@ namespace jinja2
 using FilterPtr = std::shared_ptr<ExpressionFilter::IExpressionFilter>;
 using FilterParams = CallParamsInfo;
 
+extern bool IsAFilterName(const std::string &filterName);
 extern FilterPtr CreateFilter(std::string filterName, CallParamsInfo params);
 
 namespace filters
@@ -152,6 +153,8 @@ public:
     {
         BatchMode,
         SliceMode,
+        SplitMode,
+        SplitRMode,
     };
 
     Slice(FilterParams params, Mode mode);
@@ -159,6 +162,8 @@ public:
     InternalValue Filter(const InternalValue& baseVal, RenderContext& context);
 private:
     InternalValue Batch(const InternalValue& baseVal, RenderContext& context);
+    InternalValue Split(const InternalValue& baseVal, RenderContext& context);
+    InternalValue RPartition(const InternalValue& baseVal, RenderContext& context);
 
     Mode m_mode;
 };
@@ -205,11 +210,17 @@ private:
 class StringFormat : public  FilterBase
 {
 public:
-    StringFormat(FilterParams params);
+    enum Mode
+    {
+        PyFormat,
+        CFormat
+    };
+    StringFormat(FilterParams params, Mode mode);
 
     InternalValue Filter(const InternalValue& baseVal, RenderContext& context);
 private:
     FilterParams m_params;
+    Mode m_mode;
 };
 
 class Tester : public  FilterBase

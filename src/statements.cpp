@@ -53,7 +53,10 @@ void ForStatement::RenderLoop(const InternalValue& loopVal, OutStream& os, Rende
     if (!isConverted)
     {
         if (m_elseBody)
+        {
             m_elseBody->Render(os, values);
+        }
+
         values.ExitScope();
         return;
     }
@@ -82,6 +85,8 @@ void ForStatement::RenderLoop(const InternalValue& loopVal, OutStream& os, Rende
         } while (enumerator->MoveNext());
 
         listSize = itemIdx + items.size() + 1;
+        //int64_t als = static_cast<int64_t>(listSize.value());
+        // std::cerr << " for's in makeIndexedList list size is  " << als << std::endl;
         indexedList = ListAdapter::CreateAdapter(std::move(items));
         enumerator = indexedList.GetEnumerator();
         isLast = !enumerator->MoveNext();
@@ -91,6 +96,7 @@ void ForStatement::RenderLoop(const InternalValue& loopVal, OutStream& os, Rende
     {
         int64_t itemsNum = static_cast<int64_t>(listSize.value());
         loopVar["length"s] = InternalValue(itemsNum);
+        // std::cerr << " for's list length is  " << itemsNum << std::endl;
     }
     else
     {
@@ -106,6 +112,7 @@ void ForStatement::RenderLoop(const InternalValue& loopVal, OutStream& os, Rende
     InternalValue curValue;
     InternalValue nextValue;
     loopVar["cycle"s] = static_cast<int64_t>(LoopCycleFn);
+
     for (; !isLast; ++itemIdx)
     {
         prevValue = std::move(curValue);
@@ -136,8 +143,9 @@ void ForStatement::RenderLoop(const InternalValue& loopVal, OutStream& os, Rende
         {
             const auto& valList = ConvertToList(curValue, isConverted);
             if (!isConverted)
+            {
                 continue;
-
+            }
             auto b = valList.begin();
             auto e = valList.end();
 
@@ -150,13 +158,17 @@ void ForStatement::RenderLoop(const InternalValue& loopVal, OutStream& os, Rende
             }
         }
         else
+        {
+            // std::cerr << itemIdx << " var " << m_vars[0] << " as " << AsString(curValue) << std::endl;
             context[m_vars[0]] = curValue;
+        }
 
         values.EnterScope();
         m_mainBody->Render(os, values);
         values.ExitScope();
     }
-
+    // if (!loopRendered)
+    //   std::cerr << "for loop was not rendered" << std::endl;
     if (!loopRendered && m_elseBody)
         m_elseBody->Render(os, values);
 
@@ -235,8 +247,12 @@ void SetStatement::AssignBody(InternalValue body, RenderContext& values)
         scope[m_fields.front()] = std::move(body);
     else
     {
+        int64_t i = 0;
         for (const auto& name : m_fields)
-            scope[name] = Subscript(body, name, &values);
+        {
+            scope[name] = Subscript(body, InternalValue(i), InternalValue(i+1), InternalValue(int64_t(1)), &values);
+            ++i;
+        }
     }
 }
 

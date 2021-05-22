@@ -4,12 +4,69 @@
 #include "generic_adapters.h"
 #include "helpers.h"
 #include "value_visitors.h"
+#include <iostream>
 
 namespace jinja2
 {
 
 InternalValue Value2IntValue(const Value& val);
 InternalValue Value2IntValue(Value&& val);
+
+#if 0
+static InternalValue sliceString(const std::string &value, int64_t index, int64_t end, int64_t interval)
+{
+    size_t sz = value.size();
+    int64_t asz = int64_t(sz);
+    if ( !asz || interval == 0)
+        return InternalValue();
+    size_t ws = asz;
+    std::string vv;
+    for (; index != end && ws != 0;)
+    {
+        int64_t i = index < 0 ? index + asz : index;
+        if ( i >= asz || i < 0 )
+            break;
+        vv += value[i];
+        index += interval;
+        ws--;
+    }
+    if (vv.size() == 0)
+        return InternalValue();
+    return InternalValue(std::move(vv));
+}
+#endif
+
+static InternalValue sliceListAdapter(const ListAdapter& values, int64_t index, int64_t end, int64_t interval)
+{
+    size_t sz = reinterpret_cast<size_t>(*values.GetSize());
+    int64_t asz = int64_t(sz);
+    // std::cerr << " Size " << asz << " interval " << interval << std::endl;
+    if ( !asz || interval == 0)
+        return InternalValue();
+    size_t ws = asz;
+    InternalValueList vv;
+    InternalValue iv;
+    for (; index != end && ws != 0;)
+    {
+        //std::cerr << "Add to List index " << index << " with max size " << ws << std::endl;
+        int64_t i = index < 0 ? index + asz : index;
+        if ( i >= asz || i < 0 )
+        {
+            break;
+        }
+        iv = values.GetValueByIndex(i);
+        index += interval;
+        ws--;
+        vv.push_back(iv);
+    }
+    if (vv.size() == 0)
+        return InternalValue();
+    if (vv.size() == 1)
+    {
+        return iv;
+    }
+    return ListAdapter::CreateAdapter(std::move(vv));
+}
 
 struct SubscriptionVisitor : public visitors::BaseVisitor<>
 {
@@ -43,7 +100,13 @@ struct SubscriptionVisitor : public visitors::BaseVisitor<>
 
     InternalValue operator()(const ListAdapter& values, int64_t index) const
     {
-        if (index < 0 || static_cast<size_t>(index) >= values.GetSize())
+        size_t sz = reinterpret_cast<size_t>(*values.GetSize());
+        int64_t asz = int64_t(sz);
+        if ( !asz )
+            return InternalValue();
+        if ( index < 0 )
+            index += asz;
+        if ( index < 0 || index >= asz)
             return InternalValue();
 
         return values.GetValueByIndex(index);
@@ -54,7 +117,12 @@ struct SubscriptionVisitor : public visitors::BaseVisitor<>
     template<typename CharT>
     InternalValue operator()(const std::basic_string<CharT>& str, int64_t index) const
     {
-        if (index < 0 || static_cast<size_t>(index) >= str.size())
+        int64_t asz = static_cast<int64_t>(str.size());
+        if ( !asz )
+            return InternalValue();
+        if ( index < 0 )
+            index += asz;
+        if ( index < 0 || index >= asz )
             return InternalValue();
 
         std::basic_string<CharT> resultStr(1, str[static_cast<size_t>(index)]);
@@ -64,8 +132,13 @@ struct SubscriptionVisitor : public visitors::BaseVisitor<>
     template<typename CharT>
     InternalValue operator()(const nonstd::basic_string_view<CharT>& str, int64_t index) const
     {
+        int64_t asz = static_cast<int64_t>(str.size());
+        if ( !asz )
+            return InternalValue();
+        if ( index < 0 )
+            index += asz;
         // std::cout << "operator() (const std::basic_string<CharT>& str, int64_t index)" << ": index = " << index << std::endl;
-        if (index < 0 || static_cast<size_t>(index) >= str.size())
+        if (index < 0 || index >= asz)
             return InternalValue();
 
         std::basic_string<CharT> result(1, str[static_cast<size_t>(index)]);
@@ -95,6 +168,62 @@ struct SubscriptionVisitor : public visitors::BaseVisitor<>
         return InternalValue();
     }
 };
+
+InternalValue Subscript(const InternalValue& val, const InternalValue& bidx, const InternalValue& eidx, const InternalValue& sidx, RenderContext* values)
+{
+    static const std::string callOperName = "value()";
+    int kb = GetIVKind(bidx);
+    int ke = GetIVKind(eidx);
+    int ks = GetIVKind(sidx);
+
+    InternalValue result;
+    if (kb == 0 && ke == 0 && ks == 0)
+    {
+        int64_t ib =  ConvertToInt(bidx);
+        int64_t ie =  ConvertToInt(eidx);
+        int64_t is =  ConvertToInt(sidx);
+        if ( GetIVKind(val) == 4)
+        {
+            bool cv = false;
+            ListAdapter l = ConvertToList(val, cv);
+            if (cv)
+                result = sliceListAdapter(l, ib, ie, is);
+            else
+            {
+                /*std::cerr << "Subscript: " << GetIVKind(val) << ", " << kb << " = " << ib << ", "
+                        << ke << " = " << ie << ", "
+                        << ks << " = " << is
+                << std::endl; */
+                result = Apply2<SubscriptionVisitor>(val, bidx);
+            }
+        }
+        else
+        {
+            /* std::cerr << "Subscript: " << GetIVKind(val) << ", " << kb << " = " << ib << ", "
+                    << ke << " = " << ie << ", "
+                    << ks << " = " << is
+            << std::endl; */
+            result = Apply2<SubscriptionVisitor>(val, bidx);
+        }
+    }
+    else
+        result = Apply2<SubscriptionVisitor>(val, bidx);
+
+    if (!values)
+        return result;
+
+    auto map = GetIf<MapAdapter>(&result);
+    if (!map || !map->HasValue(callOperName))
+        return result;
+
+    auto callableVal = map->GetValueByName(callOperName);
+    auto callable = GetIf<Callable>(&callableVal);
+    if (!callable || callable->GetKind() == Callable::Macro || callable->GetType() == Callable::Type::Statement)
+        return result;
+
+    CallParams callParams;
+    return callable->GetExpressionCallable()(callParams, *values);
+}
 
 InternalValue Subscript(const InternalValue& val, const InternalValue& subscript, RenderContext* values)
 {
@@ -131,6 +260,32 @@ struct StringGetter : public visitors::BaseVisitor<std::string>
     std::string operator()(const std::wstring& str) const { return ConvertString<std::string>(str); }
     std::string operator()(const nonstd::wstring_view& str) const { return ConvertString<std::string>(str); }
 };
+
+struct KindGetter : public visitors::BaseVisitor<int>
+{
+    using BaseVisitor::operator();
+
+    int operator()(int64_t) const { return 0; }
+    int operator()(double) const { return 2; }
+    int operator()(bool) const { return 3; }
+    int operator()(const ListAdapter &) const { return 4; }
+    int operator()(const MapAdapter &) const { return 5; }
+    int operator()(const ValueRef &) const { return 6; }
+    int operator()(const EmptyValue &) const { return 7; }
+    int operator()(const KeyValuePair&) const { return 8; }
+    int operator()(const Callable&) const { return 9; }
+    int operator()(const UserCallable&) const { return 10; }
+    int operator()(const std::shared_ptr<RendererBase>&) const { return 11; }
+    int operator()(const std::string&) const { return 1; }
+    int operator()(const nonstd::string_view&) const { return 1; }
+    int operator()(const std::wstring&) const { return 1; }
+    int operator()(const nonstd::wstring_view&) const { return 1; }
+};
+
+int GetIVKind(const InternalValue &val)
+{
+    return Apply<KindGetter>(val);
+}
 
 std::string AsString(const InternalValue& val)
 {

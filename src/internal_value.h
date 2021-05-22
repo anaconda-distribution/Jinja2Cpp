@@ -639,12 +639,14 @@ auto sv_to_string(const nonstd::basic_string_view<CharT>& sv)
 }
 
 InternalValue Subscript(const InternalValue& val, const InternalValue& subscript, RenderContext* values);
+InternalValue Subscript(const InternalValue& val, const InternalValue& bidx, const InternalValue& eidx, const InternalValue& sidx, RenderContext* values);
 InternalValue Subscript(const InternalValue& val, const std::string& subscript, RenderContext* values);
 std::string AsString(const InternalValue& val);
 ListAdapter ConvertToList(const InternalValue& val, bool& isConverted, bool strictConversion = true);
 ListAdapter ConvertToList(const InternalValue& val, InternalValue subscipt, bool& isConverted, bool strictConversion = true);
 Value IntValue2Value(const InternalValue& val);
 Value OptIntValue2Value(nonstd::optional<InternalValue> val);
+int GetIVKind(const InternalValue &val);
 
 } // jinja2
 

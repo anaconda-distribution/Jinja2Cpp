@@ -57,6 +57,15 @@ bool Lexer::Preprocess()
         case lexertk::token::e_divdiv:
             newToken.type = Token::DivDiv;
             break;
+        case lexertk::token::e_div:
+            newToken.type = Token::Div;
+            break;
+        case lexertk::token::e_lt:
+            newToken.type = Token::Lt;
+            break;
+        case lexertk::token::e_gt:
+            newToken.type = Token::Gt;
+            break;
         default:
             newToken.type = static_cast<Token::Type>(token.type);
             break;

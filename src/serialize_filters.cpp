@@ -6,12 +6,18 @@
 #include "value_helpers.h"
 #include "value_visitors.h"
 
+#include <boost/algorithm/string/predicate.hpp>
+#include <boost/optional.hpp>
+#include <fmt/format.h>
+
 #include <algorithm>
 #include <numeric>
 #include <random>
 #include <sstream>
 #include <string>
 
+using FormatContext = fmt::format_context;
+using FormatArgument = fmt::basic_format_arg<FormatContext>;
 using namespace std::string_literals;
 
 namespace jinja2
@@ -274,18 +280,79 @@ private:
 
 }
 
+static std::string do_reformatC2Py(const std::string &fmt)
+{
+    std::string r;
+    size_t sz = fmt.length();
+    for (size_t i = 0; i < sz; i++)
+    {
+        auto ch = fmt[i];
+        if (ch == '{' || ch == '}')
+          r += ch;
+        if (ch != '%')
+        {
+            r += ch;
+            continue;
+        }
+        if ((i+1)>=sz)
+        {
+            r += ch;
+            break;
+        }
+        ++i;
+        ch = fmt[i];
+        if ( ch == '%')
+        {
+            r+=ch;
+            continue;
+        }
+        r += "{:";
+        if (ch == '-' || ch == '+' || ch == ' ' || ch == '0')
+        {
+            r+=ch; i++; ch = fmt[i];
+        }
+        if (ch >= '0' && ch <= '9')
+        {
+            r+=ch; i++; ch = fmt[i];
+        }
+        r+=ch;
+        r+="}";
+    }
+    return r;
+}
+
 InternalValue StringFormat::Filter(const InternalValue& baseVal, RenderContext& context)
 {
     // Format library internally likes using non-owning views to complex arguments.
     // In order to ensure proper lifetime of values and named args,
     // helper buffer is created and passed to visitors.
     ValuesBuffer valuesBuffer;
-    valuesBuffer.reserve(m_params.posParams.size() + 3 * m_params.kwParams.size());
+    valuesBuffer.reserve(m_params.posParams.size() + 5 + 3 * m_params.kwParams.size());
 
     std::vector<FormatArgument> args;
+    size_t i = 0;
     for (auto& arg : m_params.posParams)
     {
-        args.push_back(Apply<FormatArgumentConverter<CachingIdentity>>(arg->Evaluate(context), &context, CachingIdentity{ valuesBuffer }));
+        ListAdapter list;
+        InternalValue iv = arg->Evaluate(context);
+        bool isConverted = false;
+
+        if (m_params.posParamsStarred[i] && !iv.IsEmpty())
+        {
+            list = ConvertToList(iv, isConverted);
+        }
+        if (isConverted)
+        {
+            for (auto &iv2 : list)
+            {
+                args.push_back(Apply<FormatArgumentConverter<CachingIdentity>>(iv2, &context, CachingIdentity{ valuesBuffer }));
+            }
+        }
+        else
+        {
+            args.push_back(Apply<FormatArgumentConverter<CachingIdentity>>(iv, &context, CachingIdentity{ valuesBuffer }));
+        }
+        ++i;
     }
 
     for (auto& arg : m_params.kwParams)
@@ -296,7 +363,13 @@ InternalValue StringFormat::Filter(const InternalValue& baseVal, RenderContext& 
     // fmt process arguments until reaching empty argument
     args.push_back(FormatArgument{});
 
-    return InternalValue(fmt::vformat(AsString(baseVal), fmt::format_args(args.data(), static_cast<unsigned>(args.size() - 1))));
+    std::string fmt = AsString(baseVal);
+    if (m_mode == CFormat)
+    {
+        fmt = do_reformatC2Py(fmt);
+    }
+
+    return InternalValue(fmt::vformat(fmt, fmt::format_args(args.data(), static_cast<unsigned>(args.size() - 1))));
 }
 
 class XmlAttrPrinter : public visitors::BaseVisitor<std::string>

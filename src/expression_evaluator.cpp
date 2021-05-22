@@ -57,10 +57,16 @@ InternalValue SubscriptExpression::Evaluate(RenderContext& values)
 {
     InternalValue cur = m_value->Evaluate(values);
 
-    for (auto idx : m_subscriptExprs)
+    size_t sz = m_subscriptExprs.size();
+    for (size_t i = 0; i < sz; i++)
     {
-        auto subscript = idx->Evaluate(values);
-        auto newVal = Subscript(cur, subscript, &values);
+        const auto &idx = m_subscriptExprs[i];
+        const auto &sidx = m_subscriptExprsSlice[i];
+        const auto &eidx = m_subscriptExprsEnd[i];
+        auto idxStart = idx->Evaluate(values);
+        auto idxSlice = sidx->Evaluate(values);
+        auto idxEnd = eidx->Evaluate(values);
+        auto newVal = Subscript(cur, idxStart, idxEnd, idxSlice, &values);
         if (cur.ShouldExtendLifetime())
             newVal.SetParentData(cur);
         std::swap(newVal, cur);
@@ -85,7 +91,7 @@ BinaryExpression::BinaryExpression(BinaryExpression::Operation oper, ExpressionE
     , m_leftExpr(leftExpr)
     , m_rightExpr(rightExpr)
 {
-    if (m_oper == In)
+    if (m_oper == In || m_oper == NotIn)
     {
         CallParamsInfo params;
         params.kwParams["seq"] = rightExpr;
@@ -96,7 +102,7 @@ BinaryExpression::BinaryExpression(BinaryExpression::Operation oper, ExpressionE
 InternalValue BinaryExpression::Evaluate(RenderContext& context)
 {
     InternalValue leftVal = m_leftExpr->Evaluate(context);
-    InternalValue rightVal = m_oper == In ? InternalValue() : m_rightExpr->Evaluate(context);
+    InternalValue rightVal = m_oper == In || m_oper == NotIn ? InternalValue() : m_rightExpr->Evaluate(context);
     InternalValue result;
 
     switch (m_oper)
@@ -105,16 +111,18 @@ InternalValue BinaryExpression::Evaluate(RenderContext& context)
     {
         bool left = ConvertToBool(leftVal);
         if (left)
-            left = ConvertToBool(rightVal);
-        result = static_cast<bool>(left);
+            result = rightVal;
+        else
+            result = leftVal;
         break;
     }
     case jinja2::BinaryExpression::LogicalOr:
     {
         bool left = ConvertToBool(leftVal);
         if (!left)
-            left = ConvertToBool(rightVal);
-        result = static_cast<bool>(left);
+            result = rightVal;
+        else
+            result = leftVal;
         break;
     }
     case jinja2::BinaryExpression::LogicalEq:
@@ -130,11 +138,21 @@ InternalValue BinaryExpression::Evaluate(RenderContext& context)
     case jinja2::BinaryExpression::DivReminder:
     case jinja2::BinaryExpression::DivInteger:
     case jinja2::BinaryExpression::Pow:
+    case jinja2::BinaryExpression::BinaryOr:
+    case jinja2::BinaryExpression::BinaryXor:
+    case jinja2::BinaryExpression::BinaryAnd:
+    case jinja2::BinaryExpression::BinaryShl:
+    case jinja2::BinaryExpression::BinaryShr:
         result = Apply2<visitors::BinaryMathOperation>(leftVal, rightVal, m_oper);
         break;
     case jinja2::BinaryExpression::In:
     {
         result = m_inTester->Test(leftVal, context);
+        break;
+    }
+    case jinja2::BinaryExpression::NotIn:
+    {
+        result = m_inTester->Test(leftVal, context) ? false : true;
         break;
     }
     case jinja2::BinaryExpression::StringConcat:
@@ -557,7 +575,10 @@ Result ParseCallParamsImpl(const T& args, const P& params, bool& isSucceeded)
     }
 
     for (auto idx = eatenPosArgs; idx < params.posParams.size(); ++ idx)
+    {
         result.extraPosArgs.push_back(params.posParams[idx]);
+        result.extraPosArgsStarred.push_back(params.posParamsStarred[idx]);
+    }
 
 
     return result;
@@ -588,7 +609,10 @@ CallParams EvaluateCallParams(const CallParamsInfo& info, RenderContext& context
     CallParams result;
 
     for (auto& p : info.posParams)
+    {
         result.posParams.push_back(p->Evaluate(context));
+        result.posParamsStarred.push_back(false);
+    }
 
     for (auto& kw : info.kwParams)
         result.kwParams[kw.first] = kw.second->Evaluate(context);

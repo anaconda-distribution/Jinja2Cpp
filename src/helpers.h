@@ -80,9 +80,11 @@ Sequence CompileEscapes(Sequence s)
                case 't': *itr1 = '\t'; break;
                default:                break;
             }
-
-            continue;
          }
+         if (itr1 != itr2)
+            *itr2 = *itr1;
+         ++itr2;
+         continue;
       }
 
       if (itr1 != itr2)

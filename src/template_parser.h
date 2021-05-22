@@ -131,6 +131,8 @@ struct ParserTraits<wchar_t> : public ParserTraitsBase<>
     }
     static std::string GetAsString(const std::wstring& str, CharRange range)
     {
+        if (range.size() == 0)
+          return "";
         auto srcStr = str.substr(range.startOffset, range.size());
         return detail::StringConverter<std::wstring, std::string>::DoConvert(srcStr);
     }
@@ -449,7 +451,7 @@ private:
                     FinishCurrentLine(match.position() + 2);
                     return MakeParseError(ErrorCode::UnexpectedExprEnd, MakeToken(Token::ExprEnd, { matchStart, matchStart + 2 }));
                 }
-                else if (m_currentBlockInfo.type != TextBlockType::Expression || (*m_template)[match.position() - 1] == '\'')
+                else if (m_currentBlockInfo.type != TextBlockType::Expression /*|| (*m_template)[match.position() - 1] == '\''*/)
                     break;
 
                 m_currentBlockInfo.range.startOffset = FinishCurrentBlock(matchStart, TextBlockType::RawText);
@@ -463,7 +465,7 @@ private:
                     FinishCurrentLine(match.position() + 2);
                     return MakeParseError(ErrorCode::UnexpectedStmtEnd, MakeToken(Token::StmtEnd, { matchStart, matchStart + 2 }));
                 }
-                else if (m_currentBlockInfo.type != TextBlockType::Statement || (*m_template)[match.position() - 1] == '\'')
+                else if (m_currentBlockInfo.type != TextBlockType::Statement /*|| (*m_template)[match.position() - 1] == '\''*/)
                     break;
 
                 m_currentBlockInfo.range.startOffset = FinishCurrentBlock(matchStart, TextBlockType::RawText);
@@ -483,6 +485,7 @@ private:
                     break;
                 else if (m_currentBlockInfo.type != TextBlockType::RawBlock)
                 {
+                    std::cerr << "RN_RawEnd failed" << std::endl;
                     FinishCurrentLine(match.position() + match.length());
                     return MakeParseError(ErrorCode::UnexpectedRawEnd, MakeToken(Token::RawEnd, { matchStart, matchStart + match.length() }));
                 }
@@ -908,7 +911,7 @@ private:
             return Keyword::Unknown;
 
         auto& match = *matchBegin;
-        for (size_t idx = 1; idx != match.size(); ++idx)
+        for (size_t idx = 1; idx < match.size(); ++idx)
         {
             if (match.length(idx) != 0)
             {
@@ -1012,6 +1015,8 @@ std::unordered_map<int, MultiStringLiteral> ParserTraitsBase<T>::s_tokens = {
     { Token::LogicalNot, UNIVERSAL_STR("not") },
     { Token::MulMul, UNIVERSAL_STR("**") },
     { Token::DivDiv, UNIVERSAL_STR("//") },
+    { Token::ShiftLeft, UNIVERSAL_STR("<<") },
+    { Token::ShiftRight, UNIVERSAL_STR(">>") },
     { Token::True, UNIVERSAL_STR("true") },
     { Token::False, UNIVERSAL_STR("false") },
     { Token::None, UNIVERSAL_STR("none") },

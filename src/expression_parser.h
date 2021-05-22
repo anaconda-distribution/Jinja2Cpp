@@ -21,9 +21,17 @@ public:
     ParseResult<RendererPtr> Parse(LexScanner& lexer);
     ParseResult<ExpressionEvaluatorPtr<FullExpressionEvaluator>> ParseFullExpression(LexScanner& lexer, bool includeIfPart = true);
     ParseResult<CallParamsInfo> ParseCallParams(LexScanner& lexer);
-    ParseResult<ExpressionEvaluatorPtr<ExpressionFilter>> ParseFilterExpression(LexScanner& lexer);
+    ParseResult<CallParamsInfo> ParseCallParams(LexScanner& lexer, ExpressionEvaluatorPtr<Expression> &left);
+    ParseResult<ExpressionEvaluatorPtr<ExpressionFilter>> ParseFilterExpression(LexScanner& lexer, int elem, ExpressionEvaluatorPtr<Expression> &left);
 private:
+    ParseResult<ExpressionEvaluatorPtr<Expression>> ParseLiteral(LexScanner& lexer, Token::Type &typ);
+    ParseResult<ExpressionEvaluatorPtr<Expression>> ParseEnclosure(LexScanner& lexer, Token::Type &typ);
+    ParseResult<ExpressionEvaluatorPtr<Expression>> ParseAtomic(LexScanner& lexer, Token::Type &typ);
+
     ParseResult<ExpressionEvaluatorPtr<Expression>> ParseLogicalNot(LexScanner& lexer);
+    ParseResult<ExpressionEvaluatorPtr<Expression>> ParseBinaryOr(LexScanner& lexer);
+    ParseResult<ExpressionEvaluatorPtr<Expression>> ParseBinaryAnd(LexScanner& lexer);
+    ParseResult<ExpressionEvaluatorPtr<Expression>> ParseBinaryXor(LexScanner& lexer);
     ParseResult<ExpressionEvaluatorPtr<Expression>> ParseLogicalOr(LexScanner& lexer);
     ParseResult<ExpressionEvaluatorPtr<Expression>> ParseLogicalAnd(LexScanner& lexer);
     ParseResult<ExpressionEvaluatorPtr<Expression>> ParseLogicalCompare(LexScanner& lexer);
@@ -31,6 +39,7 @@ private:
     ParseResult<ExpressionEvaluatorPtr<Expression>> ParseMathPow(LexScanner& lexer);
     ParseResult<ExpressionEvaluatorPtr<Expression>> ParseMathMulDiv(LexScanner& lexer);
     ParseResult<ExpressionEvaluatorPtr<Expression>> ParseMathPlusMinus(LexScanner& lexer);
+    ParseResult<ExpressionEvaluatorPtr<Expression>> ParseShift(LexScanner& lexer);
     ParseResult<ExpressionEvaluatorPtr<Expression>> ParseUnaryPlusMinus(LexScanner& lexer);
     ParseResult<ExpressionEvaluatorPtr<Expression>> ParseValueExpression(LexScanner& lexer);
     ParseResult<ExpressionEvaluatorPtr<Expression>> ParseBracedExpressionOrTuple(LexScanner& lexer);

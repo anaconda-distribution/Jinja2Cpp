@@ -12,6 +12,7 @@
 #include <random>
 #include <sstream>
 #include <string>
+#include <cstring>
 
 using namespace std::string_literals;
 
@@ -45,7 +46,8 @@ std::unordered_map<std::string, ExpressionFilter::FilterFactoryFn> s_filters = {
     { "escapecpp", FilterFactory<filters::StringConverter>::MakeCreator(filters::StringConverter::EscapeCppMode) },
     { "first", FilterFactory<filters::SequenceAccessor>::MakeCreator(filters::SequenceAccessor::FirstItemMode) },
     { "float", FilterFactory<filters::ValueConverter>::MakeCreator(filters::ValueConverter::ToFloatMode) },
-    { "format", FilterFactory<filters::StringFormat>::Create },
+    { "format", FilterFactory<filters::StringFormat>::MakeCreator(filters::StringFormat::PyFormat) },
+    { "cformat", FilterFactory<filters::StringFormat>::MakeCreator(filters::StringFormat::CFormat) },
     { "groupby", &FilterFactory<filters::GroupBy>::Create },
     { "int", FilterFactory<filters::ValueConverter>::MakeCreator(filters::ValueConverter::ToIntMode) },
     { "join", &FilterFactory<filters::Join>::Create },
@@ -67,6 +69,8 @@ std::unordered_map<std::string, ExpressionFilter::FilterFactoryFn> s_filters = {
     { "selectattr", FilterFactory<filters::Tester>::MakeCreator(filters::Tester::SelectAttrMode) },
     { "slice", FilterFactory<filters::Slice>::MakeCreator(filters::Slice::SliceMode) },
     { "sort", &FilterFactory<filters::Sort>::Create },
+    { "rpartition", FilterFactory<filters::Slice>::MakeCreator(filters::Slice::SplitRMode) },
+    { "split", FilterFactory<filters::Slice>::MakeCreator(filters::Slice::SplitMode) },
     { "striptags", FilterFactory<filters::StringConverter>::MakeCreator(filters::StringConverter::StriptagsMode) },
     { "sum", FilterFactory<filters::SequenceAccessor>::MakeCreator(filters::SequenceAccessor::SumItemsMode) },
     { "title", FilterFactory<filters::StringConverter>::MakeCreator(filters::StringConverter::TitleMode) },
@@ -91,6 +95,14 @@ extern FilterPtr CreateFilter(std::string filterName, CallParamsInfo params)
         return std::make_shared<filters::UserDefinedFilter>(std::move(filterName), std::move(params));
 
     return p->second(std::move(params));
+}
+
+bool IsAFilterName(const std::string &filterName)
+{
+    auto p = s_filters.find(filterName);
+    if (p != s_filters.end())
+        return true;
+    return false;
 }
 
 namespace filters
@@ -322,6 +334,7 @@ ApplyMacro::ApplyMacro(FilterParams params)
     ParseParams({ { "macro", true } }, params);
     m_mappingParams.kwParams = m_args.extraKwArgs;
     m_mappingParams.posParams = m_args.extraPosArgs;
+    m_mappingParams.posParamsStarred = m_args.extraPosArgsStarred;
 }
 
 InternalValue ApplyMacro::Filter(const InternalValue& baseVal, RenderContext& context)
@@ -344,8 +357,12 @@ InternalValue ApplyMacro::Filter(const InternalValue& baseVal, RenderContext& co
     callParams.kwParams = std::move(tmpCallParams.kwParams);
     callParams.posParams.reserve(tmpCallParams.posParams.size() + 1);
     callParams.posParams.push_back(baseVal);
+    callParams.posParamsStarred.push_back(false);
     for (auto& p : tmpCallParams.posParams)
+    {
         callParams.posParams.push_back(std::move(p));
+        callParams.posParamsStarred.push_back(false);
+    }
 
     InternalValue result;
     if (callable->GetType() == Callable::Type::Expression)
@@ -368,6 +385,7 @@ Map::Map(FilterParams params)
     ParseParams({ { "filter", true } }, MakeParams(std::move(params)));
     m_mappingParams.kwParams = m_args.extraKwArgs;
     m_mappingParams.posParams = m_args.extraPosArgs;
+    m_mappingParams.posParamsStarred = m_args.extraPosArgsStarred;
 }
 
 FilterParams Map::MakeParams(FilterParams params)
@@ -639,12 +657,18 @@ Slice::Slice(FilterParams params, Slice::Mode mode)
 {
     if (m_mode == BatchMode)
         ParseParams({ { "linecount"s, true }, { "fill_with"s, false } }, params);
+    else if (m_mode == SplitMode || m_mode == SplitRMode)
+        ParseParams({ { "delim"s, true, " \t\n" } }, params);
     else
         ParseParams({ { "slices"s, true }, { "fill_with"s, false } }, params);
 }
 
 InternalValue Slice::Filter(const InternalValue& baseVal, RenderContext& context)
 {
+    if (m_mode == SplitMode)
+        return Split(baseVal, context);
+    else if (m_mode == SplitRMode)
+        return RPartition(baseVal, context);
     if (m_mode == BatchMode)
         return Batch(baseVal, context);
 
@@ -687,6 +711,76 @@ InternalValue Slice::Filter(const InternalValue& baseVal, RenderContext& context
     return InternalValue(ListAdapter::CreateAdapter(std::move(resultList)));
 }
 
+InternalValue Slice::RPartition(const InternalValue& baseVal, RenderContext& context)
+{
+    InternalValue delim = GetArgumentValue("delim", context);
+    auto delim_value = AsString(delim);
+    auto val = AsString(baseVal);
+    InternalValueList resultList;
+    std::string v;
+    const char *vs = val.c_str();
+    const char *d = delim_value.c_str();
+    if (*d == 0)
+       resultList.push_back(std::move(baseVal));
+    else
+    {
+        const char *e = vs + strlen(vs);
+        while (e > vs) { --e; if (strchr(d, *e) != NULL) break; }
+        if (e <= vs && strchr(d, *e) == NULL)
+        {
+            resultList.push_back(std::move(baseVal));
+        }
+        else
+        {
+            v = "";
+            while (*vs != 0 && vs<e)
+                v += *vs++;
+            InternalValue iv = v;
+            resultList.push_back(std::move(iv));
+            v = "";
+            if (*vs != 0)
+              vs++;
+            while (*vs != 0)
+                v += *vs++;
+            InternalValue iv2 = v;
+            resultList.push_back(std::move(iv2));
+        }
+
+    }
+    return ListAdapter::CreateAdapter(std::move(resultList));
+}
+
+InternalValue Slice::Split(const InternalValue& baseVal, RenderContext& context)
+{
+    InternalValue delim = GetArgumentValue("delim", context);
+    auto delim_value = AsString(delim);
+    auto val = AsString(baseVal);
+    // std::cerr << "split delim='" << delim_value << "' " << val << std::endl;
+    InternalValueList resultList;
+    std::string v;
+    const char *vs = val.c_str();
+    const char *d = delim_value.c_str();
+    if (*d == 0)
+       resultList.push_back(std::move(baseVal));
+    else
+    {
+        while (*vs != 0)
+        {
+            v = "";
+            while (*vs != 0 && strchr(d, *vs) == NULL )
+            {
+                v += *vs++;
+            }
+            if (*vs != 0)
+              ++vs;
+            InternalValue iv = v;
+            resultList.push_back(std::move(iv));
+        }
+
+    }
+    return ListAdapter::CreateAdapter(std::move(resultList));
+}
+
 InternalValue Slice::Batch(const InternalValue& baseVal, RenderContext& context)
 {
     auto linecount_value = ConvertToInt(GetArgumentValue("linecount", context));
@@ -725,11 +819,13 @@ InternalValue Slice::Batch(const InternalValue& baseVal, RenderContext& context)
     return ListAdapter::CreateAdapter(std::move(resultList));
 }
 
-StringFormat::StringFormat(FilterParams params)
+StringFormat::StringFormat(FilterParams params, Mode mode)
 {
     ParseParams({}, params);
     m_params.kwParams = std::move(m_args.extraKwArgs);
     m_params.posParams = std::move(m_args.extraPosArgs);
+    m_params.posParamsStarred = std::move(m_args.extraPosArgsStarred);
+    m_mode = mode;
 }
 
 Tester::Tester(FilterParams params, Tester::Mode mode)
@@ -750,6 +846,7 @@ Tester::Tester(FilterParams params, Tester::Mode mode)
 
     m_testingParams.kwParams = std::move(m_args.extraKwArgs);
     m_testingParams.posParams = std::move(m_args.extraPosArgs);
+    m_testingParams.posParamsStarred = std::move(m_args.extraPosArgsStarred);
 }
 
 InternalValue Tester::Filter(const InternalValue& baseVal, RenderContext& context)
@@ -1054,6 +1151,7 @@ UserDefinedFilter::UserDefinedFilter(std::string filterName, FilterParams params
     ParseParams({ { "*args" }, { "**kwargs" } }, params);
     m_callParams.kwParams = m_args.extraKwArgs;
     m_callParams.posParams = m_args.extraPosArgs;
+    m_callParams.posParamsStarred = m_args.extraPosArgsStarred;
 }
 
 InternalValue UserDefinedFilter::Filter(const InternalValue& baseVal, RenderContext& context)
@@ -1072,8 +1170,12 @@ InternalValue UserDefinedFilter::Filter(const InternalValue& baseVal, RenderCont
     callParams.kwParams = std::move(tmpCallParams.kwParams);
     callParams.posParams.reserve(tmpCallParams.posParams.size() + 1);
     callParams.posParams.push_back(baseVal);
+    callParams.posParamsStarred.push_back(false);
     for (auto& p : tmpCallParams.posParams)
+    {
         callParams.posParams.push_back(std::move(p));
+        callParams.posParamsStarred.push_back(false);
+    }
 
     InternalValue result;
     if (callable->GetType() != Callable::Type::Expression)

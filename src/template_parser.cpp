@@ -4,6 +4,8 @@
 namespace jinja2
 {
 
+bool do_stmt_debug = false;
+
 StatementsParser::ParseResult StatementsParser::Parse(LexScanner& lexer, StatementInfoList& statementsInfo)
 {
     Token tok = lexer.NextToken();
@@ -78,6 +80,7 @@ StatementsParser::ParseResult StatementsParser::Parse(LexScanner& lexer, Stateme
         break;
     case Keyword::Filter:
         result = ParseFilter(lexer, statementsInfo, tok);
+        if (do_stmt_debug) std::cerr << " parsed filter statement" << std::endl;
         break;
     case Keyword::EndFilter:
         result = ParseEndFilter(lexer, statementsInfo, tok);
@@ -90,7 +93,10 @@ StatementsParser::ParseResult StatementsParser::Parse(LexScanner& lexer, Stateme
     {
         tok = lexer.PeekNextToken();
         if (tok != Token::Eof)
+        {
+            if (do_stmt_debug) std::cerr << " parsed eofs statement" << std::endl;
             return MakeParseError(ErrorCode::ExpectedEndOfStatement, tok);
+        }
     }
 
     return result;
@@ -137,11 +143,9 @@ StatementsParser::ParseResult StatementsParser::ParseFor(LexScanner &lexer, Stat
     {
         auto tok = lexer.NextToken();
         vars.push_back(AsString(tok.value));
-        if (lexer.NextToken() != ',')
-        {
-            lexer.ReturnToken();
+        if (lexer.PeekNextToken() != Token::Comma)
             break;
-        }
+        lexer.NextToken();
     }
 
     if (vars.empty())
@@ -181,6 +185,7 @@ StatementsParser::ParseResult StatementsParser::ParseFor(LexScanner &lexer, Stat
     }
     else if (lexer.PeekNextToken() != Token::Eof)
     {
+        if (do_stmt_debug) std::cerr << " EOF ParseFor" << std::endl;
         auto tok1 = lexer.PeekNextToken();
         return MakeParseErrorTL(ErrorCode::ExpectedToken, tok1, Token::If, Token::Recursive, Token::Eof);
     }
@@ -197,16 +202,20 @@ StatementsParser::ParseResult StatementsParser::ParseEndFor(LexScanner&, Stateme
     if (statementsInfo.size() <= 1)
         return MakeParseError(ErrorCode::UnexpectedStatement, stmtTok);
 
+    if (do_stmt_debug) std::cerr << "end for" << std::endl;
     StatementInfo info = statementsInfo.back();
     RendererPtr elseRenderer;
+
+    if (do_stmt_debug) std::cerr << "infor type == " << (int) info.type << std::endl;
     if (info.type == StatementInfo::ElseIfStatement)
     {
+        if (do_stmt_debug) std::cerr << "ElseIfStatement" << std::endl;
         auto r = std::static_pointer_cast<ElseBranchStatement>(info.renderer);
         r->SetMainBody(info.compositions[0]);
         elseRenderer = r;
 
-        statementsInfo.pop_back();
         info = statementsInfo.back();
+        statementsInfo.pop_back();
     }
 
     if (info.type != StatementInfo::ForStatement)
@@ -216,9 +225,12 @@ StatementsParser::ParseResult StatementsParser::ParseEndFor(LexScanner&, Stateme
 
     statementsInfo.pop_back();
     auto renderer = static_cast<ForStatement*>(info.renderer.get());
-    renderer->SetMainBody(info.compositions[0]);
+    renderer->SetMainBody(info.compositions[0]); // $$$$$$
     if (elseRenderer)
+    {
         renderer->SetElseBody(elseRenderer);
+        if (do_stmt_debug) std::cerr << "set else body" << std::endl;
+    }
 
     statementsInfo.back().currentComposition->AddRenderer(info.renderer);
 
@@ -232,12 +244,15 @@ StatementsParser::ParseResult StatementsParser::ParseIf(LexScanner &lexer, State
     ExpressionParser exprParser(m_settings);
     auto valueExpr = exprParser.ParseFullExpression(lexer);
     if (!valueExpr)
+    {
+        if (do_stmt_debug) std::cerr << " parse if stmt: failed expression" << std::endl;
         return MakeParseError(ErrorCode::ExpectedExpression, pivotTok);
-
+    }
     auto renderer = std::make_shared<IfStatement>(*valueExpr);
     StatementInfo statementInfo = StatementInfo::Create(StatementInfo::IfStatement, stmtTok);
     statementInfo.renderer = renderer;
     statementsInfo.push_back(statementInfo);
+    if (do_stmt_debug) std::cerr << "leave parse if stmt" << std::endl;
     return ParseResult();
 }
 
@@ -248,6 +263,7 @@ StatementsParser::ParseResult StatementsParser::ParseElse(LexScanner& /*lexer*/,
     StatementInfo statementInfo = StatementInfo::Create(StatementInfo::ElseIfStatement, stmtTok);
     statementInfo.renderer = renderer;
     statementsInfo.push_back(statementInfo);
+    if (do_stmt_debug) std::cerr << "leave parse else stmt" << std::endl;
     return ParseResult();
 }
 
@@ -258,19 +274,27 @@ StatementsParser::ParseResult StatementsParser::ParseElIf(LexScanner& lexer, Sta
     ExpressionParser exprParser(m_settings);
     auto valueExpr = exprParser.ParseFullExpression(lexer);
     if (!valueExpr)
+    {
+        if (do_stmt_debug) std::cerr << "leave parse elif stmt failed" << std::endl;
         return MakeParseError(ErrorCode::ExpectedExpression, pivotTok);
+    }
 
     auto renderer = std::make_shared<ElseBranchStatement>(*valueExpr);
     StatementInfo statementInfo = StatementInfo::Create(StatementInfo::ElseIfStatement, stmtTok);
     statementInfo.renderer = renderer;
     statementsInfo.push_back(statementInfo);
+    if (do_stmt_debug) std::cerr << "leave parse elif stmt" << std::endl;
+
     return ParseResult();
 }
 
 StatementsParser::ParseResult StatementsParser::ParseEndIf(LexScanner&, StatementInfoList& statementsInfo, const Token& stmtTok)
 {
     if (statementsInfo.size() <= 1)
+    {
+        if (do_stmt_debug) std::cerr << "leave parse endif: stmtinfo <=1" << std::endl;
         return MakeParseError(ErrorCode::UnexpectedStatement, stmtTok);
+    }
 
     auto info = statementsInfo.back();
     statementsInfo.pop_back();
@@ -278,10 +302,14 @@ StatementsParser::ParseResult StatementsParser::ParseEndIf(LexScanner&, Statemen
     std::list<StatementPtr<ElseBranchStatement>> elseBranches;
 
     auto errorTok = stmtTok;
+    if (do_stmt_debug && info.type == StatementInfo::IfStatement) std::cerr << " endif stmt: 1st is a IF"<< std::endl;
     while (info.type != StatementInfo::IfStatement)
     {
         if (info.type != StatementInfo::ElseIfStatement)
+        {
+            if (do_stmt_debug) std::cerr << "leave parse endif stmt: seen wrong stmt" << std::endl;
             return MakeParseError(ErrorCode::UnexpectedStatement, errorTok);
+        }
 
         auto elseRenderer = std::static_pointer_cast<ElseBranchStatement>(info.renderer);
         elseRenderer->SetMainBody(info.compositions[0]);
@@ -300,6 +328,8 @@ StatementsParser::ParseResult StatementsParser::ParseEndIf(LexScanner&, Statemen
 
     statementsInfo.back().currentComposition->AddRenderer(info.renderer);
 
+    if (do_stmt_debug) std::cerr << "leave parse endif stmt" << std::endl;
+
     return ParseResult();
 }
 
@@ -311,11 +341,9 @@ StatementsParser::ParseResult StatementsParser::ParseSet(LexScanner& lexer, Stat
     {
         auto tok = lexer.NextToken();
         vars.push_back(AsString(tok.value));
-        if (lexer.NextToken() != ',')
-        {
-            lexer.ReturnToken();
+        if (lexer.PeekNextToken() != ',')
             break;
-        }
+        lexer.NextToken();
     }
 
     if (vars.empty())
@@ -326,20 +354,24 @@ StatementsParser::ParseResult StatementsParser::ParseSet(LexScanner& lexer, Stat
     {
         const auto expr = exprParser.ParseFullExpression(lexer);
         if (!expr)
+        {
+            if (do_stmt_debug) std::cerr << "ParseSet ends with broken PFE()" << std::endl;
             return expr.get_unexpected();
+        }
         statementsInfo.back().currentComposition->AddRenderer(
             std::make_shared<SetLineStatement>(std::move(vars), *expr));
     }
     else if (lexer.EatIfEqual('|'))
     {
-         const auto expr = exprParser.ParseFilterExpression(lexer);
-         if (!expr)
-            return expr.get_unexpected();
-         auto statementInfo = StatementInfo::Create(
-            StatementInfo::SetStatement, stmtTok);
-         statementInfo.renderer = std::make_shared<SetFilteredBlockStatement>(
-            std::move(vars), *expr);
-         statementsInfo.push_back(std::move(statementInfo));
+        ExpressionEvaluatorPtr<Expression> dummy;
+        const auto expr = exprParser.ParseFilterExpression(lexer, '|', dummy);
+        if (!expr)
+           return expr.get_unexpected();
+        auto statementInfo = StatementInfo::Create(
+           StatementInfo::SetStatement, stmtTok);
+        statementInfo.renderer = std::make_shared<SetFilteredBlockStatement>(
+           std::move(vars), *expr);
+        statementsInfo.push_back(std::move(statementInfo));
     }
     else
     {
@@ -406,7 +438,10 @@ StatementsParser::ParseResult StatementsParser::ParseBlock(LexScanner& lexer, St
         {
             nextTok = lexer.PeekNextToken();
             if (nextTok != Token::Eof)
+            {
+                if (do_stmt_debug) std::cerr << " EOF ParseBlock" << std::endl;
                 return MakeParseErrorTL(ErrorCode::ExpectedToken, nextTok, Token::Scoped);
+            }
         }
             
         blockRenderer = std::make_shared<ParentBlockStatement>(blockName, isScoped);
@@ -430,6 +465,7 @@ StatementsParser::ParseResult StatementsParser::ParseEndBlock(LexScanner& lexer,
         tok2.type = Token::Identifier;
         Token tok3;
         tok3.type = Token::Eof;
+        if (do_stmt_debug) std::cerr << " EOF ParseEndBlock" << std::endl;
         return MakeParseError(ErrorCode::ExpectedToken, nextTok, {tok2, tok3});
     }
     
@@ -512,7 +548,7 @@ StatementsParser::ParseResult StatementsParser::ParseMacro(LexScanner& lexer, St
     else if (lexer.PeekNextToken() != Token::Eof)
     {
         Token tok = lexer.PeekNextToken();
-
+        if (do_stmt_debug) std::cerr << " EOF parse macro" << std::endl;
         return MakeParseErrorTL(ErrorCode::UnexpectedToken, tok, Token::RBracket, Token::Eof);
     }
 
@@ -695,6 +731,7 @@ StatementsParser::ParseResult StatementsParser::ParseInclude(LexScanner& lexer, 
 
     if (nextTok != Token::Eof)
     {
+        if (do_stmt_debug) std::cerr << " EOF ParseInclude" << std::endl;
         if (hasContextControl)
             return MakeParseErrorTL(ErrorCode::ExpectedEndOfStatement, nextTok, Token::Eof);
 
@@ -750,6 +787,7 @@ StatementsParser::ParseResult StatementsParser::ParseImport(LexScanner& lexer, S
 
     if (nextTok != Token::Eof)
     {
+        if (do_stmt_debug) std::cerr << " EOF ParseImport" << std::endl;
         if (hasContextControl)
             return MakeParseErrorTL(ErrorCode::ExpectedEndOfStatement, nextTok, Token::Eof);
 
@@ -798,17 +836,14 @@ StatementsParser::ParseResult StatementsParser::ParseFrom(LexScanner& lexer, Sta
         auto kw = lexer.GetAsKeyword(nextTok);
         if (kw == Keyword::With || kw == Keyword::Without)
         {
-            lexer.NextToken();
-            if (lexer.EatIfEqual(Keyword::Context))
+            if (lexer.GetAsKeyword(lexer.PeekNextNextToken()) == Keyword::Context)
             {
+                lexer.NextToken();
+                lexer.NextToken();
                 hasContextControl = true;
                 isWithContext = kw == Keyword::With;
                 nextTok = lexer.PeekNextToken();
                 break;
-            }
-            else
-            {
-                lexer.ReturnToken();
             }
         }
 
@@ -836,6 +871,7 @@ StatementsParser::ParseResult StatementsParser::ParseFrom(LexScanner& lexer, Sta
 
     if (nextTok != Token::Eof)
     {
+        if (do_stmt_debug) std::cerr << " EOF ParseFrom" << std::endl;
         if (hasContextControl)
             return MakeParseErrorTL(ErrorCode::ExpectedEndOfStatement, nextTok, Token::Eof);
 
@@ -898,7 +934,10 @@ StatementsParser::ParseResult StatementsParser::ParseWith(LexScanner& lexer, Sta
         return MakeParseError(ErrorCode::ExpectedIdentifier, nextTok);
 
     if (nextTok != Token::Eof)
+    {
+        if (do_stmt_debug) std::cerr << " EOF ParseWith" << std::endl;
         return MakeParseErrorTL(ErrorCode::ExpectedToken, nextTok, Token::Eof, ',');
+    }
 
     auto renderer = std::make_shared<WithStatement>();
     renderer->SetScopeVars(std::move(vars));
@@ -933,7 +972,8 @@ StatementsParser::ParseResult StatementsParser::ParseEndWith(LexScanner& /*lexer
 StatementsParser::ParseResult StatementsParser::ParseFilter(LexScanner& lexer, StatementInfoList& statementsInfo, const Token& stmtTok)
 {
     ExpressionParser exprParser(m_settings);
-    auto filterExpr = exprParser.ParseFilterExpression(lexer);
+    ExpressionEvaluatorPtr<Expression> dummy;
+    auto filterExpr = exprParser.ParseFilterExpression(lexer, '|', dummy);
     if (!filterExpr)
     {
         return filterExpr.get_unexpected();

@@ -17,6 +17,12 @@ enum
     LoopCycleFn = 2
 };
 
+class ExpressionEvaluatorBase;
+
+template<typename T = ExpressionEvaluatorBase>
+using ExpressionEvaluatorPtr = std::shared_ptr<T>;
+using Expression = ExpressionEvaluatorBase;
+
 class ExpressionEvaluatorBase
 {
 public:
@@ -26,20 +32,18 @@ public:
     virtual void Render(OutStream& stream, RenderContext& values);
 };
 
-template<typename T = ExpressionEvaluatorBase>
-using ExpressionEvaluatorPtr = std::shared_ptr<T>;
-using Expression = ExpressionEvaluatorBase;
-
 struct CallParams
 {
     std::unordered_map<std::string, InternalValue> kwParams;
     std::vector<InternalValue> posParams;
+    std::vector<bool> posParamsStarred;
 };
 
 struct CallParamsInfo
 {
     std::unordered_map<std::string, ExpressionEvaluatorPtr<>> kwParams;
     std::vector<ExpressionEvaluatorPtr<>> posParams;
+    std::vector<bool> posParamsStarred;
 };
 
 struct ArgumentInfo
@@ -61,6 +65,7 @@ struct ParsedArgumentsInfo
     std::unordered_map<std::string, ExpressionEvaluatorPtr<>> args;
     std::unordered_map<std::string, ExpressionEvaluatorPtr<>> extraKwArgs;
     std::vector<ExpressionEvaluatorPtr<>> extraPosArgs;
+    std::vector<bool> extraPosArgsStarred;
 
     ExpressionEvaluatorPtr<> operator[](const std::string& name) const
     {
@@ -77,6 +82,7 @@ struct ParsedArguments
     std::unordered_map<std::string, InternalValue> args;
     std::unordered_map<std::string, InternalValue> extraKwArgs;
     std::vector<InternalValue> extraPosArgs;
+    std::vector<bool> extraPosArgsStarred;
 
     InternalValue operator[](const std::string& name) const
     {
@@ -133,10 +139,20 @@ public:
     {
         m_subscriptExprs.push_back(value);
     }
+    void AddIndexEnd(ExpressionEvaluatorPtr<Expression> value)
+    {
+        m_subscriptExprsEnd.push_back(value);
+    }
+    void AddIndexSlice(ExpressionEvaluatorPtr<Expression> value)
+    {
+        m_subscriptExprsSlice.push_back(value);
+    }
 
 private:
     ExpressionEvaluatorPtr<Expression> m_value;
     std::vector<ExpressionEvaluatorPtr<Expression>> m_subscriptExprs;
+    std::vector<ExpressionEvaluatorPtr<Expression>> m_subscriptExprsEnd;
+    std::vector<ExpressionEvaluatorPtr<Expression>> m_subscriptExprsSlice;
 };
 
 class FilteredExpression : public Expression
@@ -177,7 +193,6 @@ public:
     }
 
     InternalValue Evaluate(RenderContext&) override;
-
 private:
     std::vector<ExpressionEvaluatorPtr<>> m_exprs;
 };
@@ -265,6 +280,12 @@ public:
         LogicalGe,
         LogicalLe,
         In,
+        NotIn,
+        BinaryOr,
+        BinaryXor,
+        BinaryAnd,
+        BinaryShl,
+        BinaryShr,
         Plus,
         Minus,
         Mul,

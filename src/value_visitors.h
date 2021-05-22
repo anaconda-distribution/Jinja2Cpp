@@ -98,6 +98,21 @@ auto Apply2(const InternalValue& val1, const InternalValue& val2, Args&& ... arg
     });
 }
 
+template<typename V, typename ... Args>
+auto Apply4(const InternalValue& val1, const InternalValue& val2, const InternalValue& val3, const InternalValue& val4, Args&& ... args)
+{
+    return detail::ApplyUnwrapped(val1.GetData(), [&val2, &val3, &val4, &args...](auto& uwVal1) {
+        return detail::ApplyUnwrapped(val2.GetData(), [&uwVal1, &val3, &val4, &args...](auto& uwVal2) {
+            return detail::ApplyUnwrapped(val3.GetData(), [&uwVal1, &uwVal2, &val4, &args...](auto& uwVal3) {
+                return detail::ApplyUnwrapped(val4.GetData(), [&uwVal1, &uwVal2, &uwVal3, &args...](auto& uwVal4) {
+            auto v = V(args...);
+            return nonstd::visit(detail::RecursiveUnwrapper<V>(&v), uwVal1, uwVal2, uwVal3, uwVal4);
+                });
+            });
+        });
+    });
+}
+
 bool ConvertToBool(const InternalValue& val);
 
 namespace visitors
@@ -539,6 +554,21 @@ struct BinaryMathOperation : BaseVisitor<>
         InternalValue result = 0.0;
         switch (m_oper)
         {
+        case jinja2::BinaryExpression::BinaryOr:
+            result = (double) ((int64_t) left | (int64_t) right);
+            break;
+        case jinja2::BinaryExpression::BinaryXor:
+            result = (double) ((int64_t) left ^ (int64_t) right);
+            break;
+        case jinja2::BinaryExpression::BinaryAnd:
+            result = (double) ((int64_t) left & (int64_t) right);
+            break;
+        case jinja2::BinaryExpression::BinaryShl:
+            result = (double) ((int64_t) left << (int64_t) right);
+            break;
+        case jinja2::BinaryExpression::BinaryShr:
+            result = (double) ((int64_t) left >> (int64_t) right);
+            break;
         case jinja2::BinaryExpression::Plus:
             result = left + right;
             break;
@@ -593,6 +623,21 @@ struct BinaryMathOperation : BaseVisitor<>
         InternalValue result;
         switch (m_oper)
         {
+        case jinja2::BinaryExpression::BinaryOr:
+            result = left | right;
+            break;
+        case jinja2::BinaryExpression::BinaryXor:
+            result = left ^ right;
+            break;
+        case jinja2::BinaryExpression::BinaryAnd:
+            result = left & right;
+            break;
+        case jinja2::BinaryExpression::BinaryShl:
+            result = left << right;
+            break;
+        case jinja2::BinaryExpression::BinaryShr:
+            result = left >> right;
+            break;
         case jinja2::BinaryExpression::Plus:
             result = left + right;
             break;
@@ -721,6 +766,11 @@ struct BinaryMathOperation : BaseVisitor<>
             for (int i = 0; i < right; ++i)
                 str.append(left.begin(), left.end());
             result = TargetString(std::move(str));
+        } else if (m_oper ==  jinja2::BinaryExpression::DivReminder)
+        { // todo ... implement printf
+            auto str = string(left.begin(), left.end());
+            str += right;
+            result = TargetString(std::move(str));
         }
         return result;
     }
@@ -740,6 +790,22 @@ struct BinaryMathOperation : BaseVisitor<>
             result = TargetString(std::move(str));
             break;
         }
+        case jinja2::BinaryExpression::LogicalAnd:
+        {
+            auto str = string(left.begin(), left.end());
+            if (!str.empty())
+               str = string(right.begin(), right.end());
+            result = TargetString(std::move(str));
+            break;
+        }
+        case jinja2::BinaryExpression::LogicalOr:
+        {
+            auto str = string(left.begin(), left.end());
+            if (str.empty())
+               str.append(right.begin(), right.end());
+            result = TargetString(std::move(str));
+            break;
+        }   
         case jinja2::BinaryExpression::LogicalEq:
             result = m_compType == BinaryExpression::CaseSensitive ? left == right : boost::iequals(left, right);
             break;
@@ -772,6 +838,13 @@ struct BinaryMathOperation : BaseVisitor<>
                 result = boost::iequals(left, right) ? true : boost::lexicographical_compare(left, right, boost::algorithm::is_iless());
             }
             break;
+        case jinja2::BinaryExpression::DivReminder:
+            { // todo ... implement printf
+                auto str = string(left.begin(), left.end());
+                str.append(right.begin(), right.end());
+                result = TargetString(std::move(str));
+                break;
+            }
         default:
             break;
         }
@@ -797,6 +870,20 @@ struct BinaryMathOperation : BaseVisitor<>
         return result;
     }
 
+    template<typename CharT>
+    InternalValue operator() (const nonstd::basic_string_view<CharT>& left, const ListAdapter& right) const
+    {
+        // using string = std::basic_string<CharT>;
+        InternalValue result;
+
+        switch (m_oper)
+        {
+        case jinja2::BinaryExpression::DivReminder:
+        default:
+            break;
+        }
+        return result;
+    }
     InternalValue operator() (const ListAdapter& left, const ListAdapter& right) const
     {
         InternalValue result;
@@ -844,6 +931,15 @@ struct BinaryMathOperation : BaseVisitor<>
             break;
         case jinja2::BinaryExpression::LogicalLt:
             result = (left ? 1 : 0) < (right ? 1 : 0);
+            break;
+        case jinja2::BinaryExpression::LogicalGt:
+            result = (left ? 1 : 0) > (right ? 1 : 0);
+            break;
+        case jinja2::BinaryExpression::LogicalGe:
+            result = (left ? 1 : 0) >= (right ? 1 : 0);
+            break;
+        case jinja2::BinaryExpression::LogicalLe:
+            result = (left ? 1 : 0) <= (right ? 1 : 0);
             break;
         default:
             break;
