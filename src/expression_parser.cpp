@@ -506,7 +506,7 @@ ExpressionParser::ParseResult<ExpressionEvaluatorPtr<Expression>> ExpressionPars
 {
     ParseResult<ExpressionEvaluatorPtr<Expression>> result;
     Token tok = lexer.PeekNextToken();
-    typ = tok.type;
+    typ = Token::String; // we want to allow direct subscripts/filters, etc
     switch (tok.type)
     {
     case '*':
@@ -514,6 +514,7 @@ ExpressionParser::ParseResult<ExpressionEvaluatorPtr<Expression>> ExpressionPars
         lexer.NextToken();
         ParseResult<ExpressionEvaluatorPtr<Expression>> r = ParseBinaryOr(lexer);
         // $$$
+        typ = Token::Eof;
         return r;
     }
     // "(" starred_expression ")"
