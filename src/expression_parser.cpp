@@ -12,6 +12,25 @@ extern bool IsACallName(const std::string &filterName);
 
 bool do_expr_debug = false;
 
+static const char *fix_names[] = {
+  "os",
+  "os.environ",
+  "os.environ.get",
+  NULL
+};
+
+static bool is_func_name(const std::string &name)
+{
+    const char **h = fix_names;
+    while (*h != NULL)
+    {
+        if (name == *h)
+          return true;
+        ++h;
+    }
+    return false;
+}
+
 template<typename T>
 auto ReplaceErrorIfPossible(T& result, const Token& pivotTok, ErrorCode newError)
 {
@@ -512,8 +531,9 @@ ExpressionParser::ParseResult<ExpressionEvaluatorPtr<Expression>> ExpressionPars
     case '*':
     {
         lexer.NextToken();
+        if (lexer.PeekNextToken() == Token::Eof)
+          return MakeParseError(ErrorCode::UnexpectedToken, lexer.PeekNextToken());
         ParseResult<ExpressionEvaluatorPtr<Expression>> r = ParseBinaryOr(lexer);
-        // $$$
         typ = Token::Eof;
         return r;
     }
@@ -580,7 +600,9 @@ ExpressionParser::ParseResult<ExpressionEvaluatorPtr<Expression>> ExpressionPars
                 auto tk2 = lexer.PeekNextNextToken();
                 if ( tk2.type == Token::Identifier)
                 {
-                    if ((tok != Token::Dot || left != "loop") && IsAFilterName(AsString(tk2.value)))
+                    std::string right = AsString(tk2.value);
+                    bool is_dotted_name = is_func_name(left + "." + right);
+                    if (!is_dotted_name && IsAFilterName(right))
                     {
                         lexer.NextToken();
                         auto filter = ParseFilterExpression(lexer, '.', *valueRef);
@@ -594,20 +616,18 @@ ExpressionParser::ParseResult<ExpressionEvaluatorPtr<Expression>> ExpressionPars
                     }
                     else if (typ == Token::Identifier)
                     {
-                        if (tok == Token::Dot && left == "loop")
+                        if (!is_dotted_name)
                         {
                             valueRef = ParseSubscriptDotName(lexer, *valueRef);
                             left = "";
                         }
                         else
                         {
-                            std::string right = AsString(tk2.value);
                             left += ".";
                             left += right;
                             if (do_expr_debug)
                                 std::cerr << "Token ," << left << "' read (" << right << ")" << std::endl;
                             valueRef = std::make_shared<ValueRefExpression>(left.c_str());
-                            //valueRef = std::make_shared<ConstantExpression>(InternalValue(left.c_str()));
                             lexer.NextToken();
                             lexer.NextToken();
                         }
@@ -638,13 +658,15 @@ ExpressionParser::ParseResult<ExpressionEvaluatorPtr<Expression>> ExpressionPars
 
         if (!expr)
         {
-            if (do_expr_debug || 1) std::cerr << "within (...) failed"  << std::endl;
+            if (do_expr_debug) std::cerr << "within (...) failed"  << std::endl;
             return ReplaceErrorIfPossible(expr, pivotTok, ErrorCode::ExpectedRoundBracket);
         }
 
         exprs.push_back(*expr);
         Token tok = lexer.NextToken();
-        if (tok == ')' || tok == Token::Eof)
+        if (tok == Token::Eof)
+            return MakeParseError(ErrorCode::UnexpectedToken, tok);
+        if (tok == ')')
             break;
         else if (tok == ',')
             isTuple = true;
@@ -1107,6 +1129,8 @@ ExpressionParser::ParseResult<ExpressionEvaluatorPtr<IfExpression>> ExpressionPa
     catch (const std::runtime_error& ex)
     {
         std::cout << "Filter parsing problem: " << ex.what() << std::endl;
+        ExpressionEvaluatorPtr<IfExpression> result2;
+        return result2;
     }
     return result;
 }
