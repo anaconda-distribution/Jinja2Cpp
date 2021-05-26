@@ -580,7 +580,7 @@ ExpressionParser::ParseResult<ExpressionEvaluatorPtr<Expression>> ExpressionPars
                 auto tk2 = lexer.PeekNextNextToken();
                 if ( tk2.type == Token::Identifier)
                 {
-                    if (IsAFilterName(AsString(tk2.value)))
+                    if ((tok != Token::Dot || left != "loop") && IsAFilterName(AsString(tk2.value)))
                     {
                         lexer.NextToken();
                         auto filter = ParseFilterExpression(lexer, '.', *valueRef);
@@ -594,15 +594,23 @@ ExpressionParser::ParseResult<ExpressionEvaluatorPtr<Expression>> ExpressionPars
                     }
                     else if (typ == Token::Identifier)
                     {
-                        std::string right = AsString(tk2.value);
-                        left += ".";
-                        left += right;
-                        if (do_expr_debug)
-                            std::cerr << "Token ," << left << "' read (" << right << ")" << std::endl;
-                        valueRef = std::make_shared<ValueRefExpression>(left.c_str());
-                        //valueRef = std::make_shared<ConstantExpression>(InternalValue(left.c_str()));
-                        lexer.NextToken();
-                        lexer.NextToken();
+                        if (tok == Token::Dot && left == "loop")
+                        {
+                            valueRef = ParseSubscriptDotName(lexer, *valueRef);
+                            left = "";
+                        }
+                        else
+                        {
+                            std::string right = AsString(tk2.value);
+                            left += ".";
+                            left += right;
+                            if (do_expr_debug)
+                                std::cerr << "Token ," << left << "' read (" << right << ")" << std::endl;
+                            valueRef = std::make_shared<ValueRefExpression>(left.c_str());
+                            //valueRef = std::make_shared<ConstantExpression>(InternalValue(left.c_str()));
+                            lexer.NextToken();
+                            lexer.NextToken();
+                        }
                     }
                     else
                         break;
@@ -851,6 +859,28 @@ ExpressionParser::ParseResult<CallParamsInfo> ExpressionParser::ParseCallParams(
     return result;
 }
 
+ExpressionParser::ParseResult<ExpressionEvaluatorPtr<Expression>> ExpressionParser::ParseSubscriptDotName(LexScanner& lexer, ExpressionEvaluatorPtr<Expression> valueRef)
+{
+    ExpressionEvaluatorPtr<SubscriptExpression> result = std::make_shared<SubscriptExpression>(valueRef);
+    Token tok = lexer.PeekNextToken();
+    Token tk2 = lexer.PeekNextNextToken();
+    if (tok != Token::Dot || tk2 != Token::Identifier)
+       return MakeParseError(ErrorCode::ExpectedIdentifier, tok);;
+    lexer.NextToken();
+    lexer.NextToken();
+    ParseResult<ExpressionEvaluatorPtr<Expression>> indexExpr;
+    ParseResult<ExpressionEvaluatorPtr<Expression>> endExpr;
+    ParseResult<ExpressionEvaluatorPtr<Expression>> sliceExpr;
+    auto valueName = AsString(tk2.value);
+    indexExpr = std::make_shared<ConstantExpression>(InternalValue(valueName));
+    endExpr = std::make_shared<ConstantExpression>(InternalValue(valueName));
+    sliceExpr = std::make_shared<ConstantExpression>(InternalValue(static_cast<int64_t>(1)));
+    result->AddIndex(*indexExpr);
+    result->AddIndexEnd(*endExpr);
+    result->AddIndexSlice(*sliceExpr);
+    return result;
+}
+
 ExpressionParser::ParseResult<ExpressionEvaluatorPtr<Expression>> ExpressionParser::ParseSubscript(LexScanner& lexer, ExpressionEvaluatorPtr<Expression> valueRef)
 {
     ExpressionEvaluatorPtr<SubscriptExpression> result = std::make_shared<SubscriptExpression>(valueRef);
@@ -977,7 +1007,6 @@ ExpressionParser::ParseResult<ExpressionEvaluatorPtr<Expression>> ExpressionPars
         result->AddIndex(*indexExpr);
         result->AddIndexEnd(*endExpr);
         result->AddIndexSlice(*sliceExpr);
-        //return result;
     }
     if (do_expr_debug) std::cerr << " return slice successful" << std::endl;
     return result;

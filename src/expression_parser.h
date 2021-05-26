@@ -47,6 +47,7 @@ private:
     ParseResult<ExpressionEvaluatorPtr<Expression>> ParseTuple(LexScanner& lexer);
     ParseResult<ExpressionEvaluatorPtr<Expression>> ParseCall(LexScanner& lexer, ExpressionEvaluatorPtr<Expression> valueRef);
     ParseResult<ExpressionEvaluatorPtr<Expression>> ParseSubscript(LexScanner& lexer, ExpressionEvaluatorPtr<Expression> valueRef);
+    ParseResult<ExpressionEvaluatorPtr<Expression>> ParseSubscriptDotName(LexScanner& lexer, ExpressionEvaluatorPtr<Expression> valueRef);
     ParseResult<ExpressionEvaluatorPtr<IfExpression>> ParseIfExpression(LexScanner& lexer);
 
 private:

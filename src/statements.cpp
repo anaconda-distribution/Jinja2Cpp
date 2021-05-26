@@ -113,6 +113,7 @@ void ForStatement::RenderLoop(const InternalValue& loopVal, OutStream& os, Rende
     InternalValue nextValue;
     loopVar["cycle"s] = static_cast<int64_t>(LoopCycleFn);
 
+    loopVar["last"s] = isLast;
     for (; !isLast; ++itemIdx)
     {
         prevValue = std::move(curValue);
