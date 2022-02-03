@@ -38,7 +38,7 @@ static InternalValue sliceString(const std::string &value, int64_t index, int64_
 
 static InternalValue sliceListAdapter(const ListAdapter& values, int64_t index, int64_t end, int64_t interval)
 {
-    size_t sz = reinterpret_cast<size_t>(*values.GetSize());
+    size_t sz = static_cast<size_t>(*values.GetSize());
     int64_t asz = int64_t(sz);
     // std::cerr << " Size " << asz << " interval " << interval << std::endl;
     if ( !asz || interval == 0)
@@ -100,7 +100,7 @@ struct SubscriptionVisitor : public visitors::BaseVisitor<>
 
     InternalValue operator()(const ListAdapter& values, int64_t index) const
     {
-        size_t sz = reinterpret_cast<size_t>(*values.GetSize());
+        size_t sz = static_cast<size_t>(*values.GetSize());
         int64_t asz = int64_t(sz);
         if ( !asz )
             return InternalValue();
