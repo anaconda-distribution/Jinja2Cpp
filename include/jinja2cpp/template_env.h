@@ -1,8 +1,6 @@
 #ifndef JINJA2CPP_TEMPLATE_ENV_H
 #define JINJA2CPP_TEMPLATE_ENV_H
 
-#include <mutex>
-
 #include "config.h"
 #include "error_info.h"
 #include "filesystem_handler.h"
