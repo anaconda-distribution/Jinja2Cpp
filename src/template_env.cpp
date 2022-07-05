@@ -14,13 +14,6 @@ struct TemplateFunctions<char>
     static auto LoadFile(const std::string& fileName, const IFilesystemHandler* fs) { return fs->OpenStream(fileName); }
 };
 
-template<>
-struct TemplateFunctions<wchar_t>
-{
-    using ResultType = nonstd::expected<TemplateW, ErrorInfoW>;
-    static TemplateW CreateTemplate(TemplateEnv* env) { return TemplateW(env); }
-    static auto LoadFile(const std::string& fileName, const IFilesystemHandler* fs) { return fs->OpenWStream(fileName); }
-};
 
 template<typename CharT, typename T, typename Cache>
 auto TemplateEnv::LoadTemplateImpl(TemplateEnv* env, std::string fileName, const T& filesystemHandlers, Cache& cache)
@@ -85,11 +78,6 @@ auto TemplateEnv::LoadTemplateImpl(TemplateEnv* env, std::string fileName, const
 nonstd::expected<Template, ErrorInfo> TemplateEnv::LoadTemplate(std::string fileName)
 {
     return LoadTemplateImpl<char>(this, std::move(fileName), m_filesystemHandlers, m_templateCache);
-}
-
-nonstd::expected<TemplateW, ErrorInfoW> TemplateEnv::LoadTemplateW(std::string fileName)
-{
-    return LoadTemplateImpl<wchar_t>(this, std::move(fileName), m_filesystemHandlers, m_templateWCache);
 }
 
 } // jinja2

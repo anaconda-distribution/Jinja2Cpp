@@ -37,26 +37,6 @@ TEST_F(TemplateEnvFixture, EnvironmentAbsentErrorsTest)
 
 TEST_F(TemplateEnvFixture, EnvironmentAbsentErrorsTest_Wide)
 {
-    TemplateW tpl1;
-    auto parseResult = tpl1.Load(L"{% extends 'module' %}");
-    ASSERT_FALSE(parseResult.has_value());
-
-    EXPECT_EQ(L"noname.j2tpl:1:4: error: Template environment doesn't set\n{% extends 'module' %}\n---^-------", ErrorToString(parseResult.error()));
-
-    parseResult = tpl1.Load(L"{% include 'module' %}");
-    ASSERT_FALSE(parseResult.has_value());
-
-    EXPECT_EQ(L"noname.j2tpl:1:4: error: Template environment doesn't set\n{% include 'module' %}\n---^-------", ErrorToString(parseResult.error()));
-
-    parseResult = tpl1.Load(L"{% from 'module' %}");
-    ASSERT_FALSE(parseResult.has_value());
-
-    EXPECT_EQ(L"noname.j2tpl:1:4: error: Template environment doesn't set\n{% from 'module' %}\n---^-------", ErrorToString(parseResult.error()));
-
-    parseResult = tpl1.Load(L"{% import 'module' %}");
-    ASSERT_FALSE(parseResult.has_value());
-
-    EXPECT_EQ(L"noname.j2tpl:1:4: error: Template environment doesn't set\n{% import 'module' %}\n---^-------", ErrorToString(parseResult.error()));
 }
 
 TEST_F(TemplateEnvFixture, RenderErrorsTest)
@@ -87,28 +67,6 @@ TEST_F(TemplateEnvFixture, RenderErrorsTest)
 
 TEST_F(TemplateEnvFixture, RenderErrorsTest_Wide)
 {
-    TemplateW tpl1;
-    auto renderResult = tpl1.RenderAsString({});
-    ASSERT_FALSE(renderResult.has_value());
-
-    EXPECT_EQ(L"<unknown file>:1:1: error: Template not parsed\n", ErrorToString(renderResult.error()));
-
-    TemplateW tpl2;
-    tpl2.Load(LR"({{ foo() }})");
-    renderResult = tpl2.RenderAsString({ {"foo", MakeCallable([]() -> Value {throw std::runtime_error("Bang!"); })} });
-    ASSERT_FALSE(renderResult.has_value());
-
-    EXPECT_EQ(L"noname.j2tpl:1:1: error: Unexpected exception occurred during template processing. Exception: Bang!\n", ErrorToString(renderResult.error()));
-
-    TemplateW tpl3(&m_env);
-    auto parseResult = tpl3.Load(L"{% import name as name %}");
-    EXPECT_TRUE(parseResult.has_value());
-    if (!parseResult)
-        std::wcout << parseResult.error() << std::endl;
-    renderResult = tpl3.RenderAsString({ {"name", 10} });
-    ASSERT_FALSE(renderResult.has_value());
-
-    EXPECT_EQ(L"noname.j2tpl:1:1: error: Invalid template name: 10\n", ErrorToString(renderResult.error()));
 }
 
 TEST_F(TemplateEnvFixture, ErrorPropagationTest)
@@ -149,38 +107,6 @@ TEST_F(TemplateEnvFixture, ErrorPropagationTest)
 
 TEST_F(TemplateEnvFixture, ErrorPropagationTest_Wide)
 {
-    AddFile("module", "{% for %}");
-    TemplateW tpl1(&m_env);
-    auto parseResult = tpl1.Load(L"{% extends 'module' %}");
-    ASSERT_TRUE(parseResult.has_value());
-    auto renderResult = tpl1.RenderAsString({});
-    ASSERT_FALSE(renderResult.has_value());
-
-    EXPECT_EQ(L"module:1:8: error: Identifier expected\n{% for %}\n    ---^-------", ErrorToString(renderResult.error()));
-
-    TemplateW tpl2(&m_env);
-    parseResult = tpl2.Load(L"{% include 'module' %}");
-    ASSERT_TRUE(parseResult.has_value());
-    renderResult = tpl2.RenderAsString({});
-    ASSERT_FALSE(renderResult.has_value());
-
-    EXPECT_EQ(L"module:1:8: error: Identifier expected\n{% for %}\n    ---^-------", ErrorToString(renderResult.error()));
-
-    TemplateW tpl3(&m_env);
-    parseResult = tpl3.Load(L"{% from 'module' import name %}");
-    ASSERT_TRUE(parseResult.has_value());
-    renderResult = tpl3.RenderAsString({});
-    ASSERT_FALSE(renderResult.has_value());
-
-    EXPECT_EQ(L"module:1:8: error: Identifier expected\n{% for %}\n    ---^-------", ErrorToString(renderResult.error()));
-
-    TemplateW tpl4(&m_env);
-    parseResult = tpl4.Load(L"{% import 'module' as module %}");
-    ASSERT_TRUE(parseResult.has_value());
-    renderResult = tpl4.RenderAsString({});
-    ASSERT_FALSE(renderResult.has_value());
-
-    EXPECT_EQ(L"module:1:8: error: Identifier expected\n{% for %}\n    ---^-------", ErrorToString(renderResult.error()));
 }
 
 TEST_P(ErrorsGenericTest, Test)
@@ -201,18 +127,6 @@ TEST_P(ErrorsGenericTest, Test)
 
 TEST_P(ErrorsGenericTest, Test_Wide)
 {
-    auto& testParam = GetParam();
-    std::string source = testParam.tpl;
-
-    TemplateEnv env;
-    TemplateW tpl(&env);
-    auto parseResult = tpl.Load(jinja2::ConvertString<std::wstring>(source));
-    ASSERT_FALSE(parseResult.has_value());
-
-    auto result = ErrorToString(parseResult.error());
-    std::wcout << result << std::endl;
-    std::wstring expectedResult = jinja2::ConvertString<std::wstring>(testParam.result);
-    EXPECT_EQ(expectedResult, result);
 }
 
 TEST_P(ErrorsGenericExtensionsTest, Test)
@@ -235,20 +149,6 @@ TEST_P(ErrorsGenericExtensionsTest, Test)
 
 TEST_P(ErrorsGenericExtensionsTest, Test_Wide)
 {
-    auto& testParam = GetParam();
-    std::string source = testParam.tpl;
-
-    TemplateEnv env;
-    env.GetSettings().extensions.Do = true;
-
-    TemplateW tpl(&env);
-    auto parseResult = tpl.Load(jinja2::ConvertString<std::wstring>(source));
-    ASSERT_FALSE(parseResult.has_value());
-
-    auto result = ErrorToString(parseResult.error());
-    std::wcout << result << std::endl;
-    std::wstring expectedResult = jinja2::ConvertString<std::wstring>(testParam.result);
-    EXPECT_EQ(expectedResult, result);
 }
 
 INSTANTIATE_TEST_CASE_P(BasicTest, ErrorsGenericTest, ::testing::Values(

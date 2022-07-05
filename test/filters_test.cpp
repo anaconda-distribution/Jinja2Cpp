@@ -612,7 +612,6 @@ struct XmlAttr : ::testing::Test
     void PerformBothXmlAttrTests(const std::string& source, const std::string& expectedResult, const jinja2::ValuesMap& params)
     {
         PerformXmlAttrTest<Template>(source, expectedResult, params);
-        PerformXmlAttrTest<TemplateW>(ConvertString<std::wstring>(source), ConvertString<std::wstring>(expectedResult), params);
     }
 
     template<typename TemplateType, typename StringType>
@@ -628,7 +627,6 @@ struct XmlAttr : ::testing::Test
     void PerformNegativeTest(const std::string& source, const jinja2::ValuesMap& params = {})
     {
         EXPECT_FALSE(ParseTemplate<Template>(source));
-        EXPECT_FALSE(ParseTemplate<TemplateW>(ConvertString<std::wstring>(source)));   
     }
 };
 

@@ -64,21 +64,6 @@ struct SourceLocation
 };
 
 template<typename CharT>
-/*!
- * \brief Detailed information about the parse-time or render-time error
- *
- * If template parsing or rendering fails the detailed error information is provided. Exact specialization of ErrorInfoTpl is an object which contains
- * this information. Type of specialization depends on type of the template object: \ref ErrorInfo for \ref Template and \ref ErrorInfoW for \ref TemplateW.
- *
- * Detailed information about an error contains:
- * - Error code
- * - Error location
- * - Other locations related to the error
- * - Description of the location
- * - Extra parameters of the error
- *
- * @tparam CharT Character type which was used in template parser
- */
 class ErrorInfoTpl
 {
 public:

@@ -109,38 +109,4 @@ TEST(MetadataTest, Metadata_JsonData_Narrow)
 
 TEST(MetadataTest, DISABLED_Metadata_JsonData_Wide)
 {
-    std::wstring json = LR"({
-    "stringValue": "Hello!",
-    "subobject": {
-        "intValue": 10,
-        "array": [1, 2, 3, 4, 5]
-    }
-})";
-
-    auto source = L"{% meta %}" + json + L"{% endmeta %}Hello World!";
-
-    TemplateW tpl;
-    auto parse_result = tpl.Load(source);
-    EXPECT_FALSE(!parse_result);
-    auto metadataValue = tpl.GetMetadata();
-    EXPECT_FALSE(!metadataValue);
-    EXPECT_EQ(2, metadataValue.value().GetSize());
-
-    auto& metadata = metadataValue.value();
-    EXPECT_TRUE(metadata.HasValue("stringValue"));
-    EXPECT_TRUE(metadata.HasValue("subobject"));
-    EXPECT_EQ("Hello!", AsString(metadata["stringValue"]));
-    auto subobjectVal = metadata["subobject"];
-    const auto& subobject = subobjectVal.get<GenericMap>();
-    EXPECT_EQ(10, subobject["intValue"].get<int64_t>());
-    EXPECT_EQ(5, subobject["array"].get<GenericList>().GetSize().value());
-
-    auto metadataRaw = tpl.GetMetadataRaw().value();
-    EXPECT_FALSE(metadataRaw.metadata.empty());
-    EXPECT_EQ("json", metadataRaw.metadataType);
-    EXPECT_EQ(nonstd::wstring_view(json.data(), json.size()), metadataRaw.metadata);
-    std::wcout << metadataRaw.metadata << std::endl;
-    auto renderResult = tpl.RenderAsString({});
-    EXPECT_FALSE(!renderResult);
-    EXPECT_EQ(L"Hello World!", renderResult.value());
 }

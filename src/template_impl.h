@@ -77,15 +77,6 @@ struct TemplateLoader<char>
     }
 };
 
-template<>
-struct TemplateLoader<wchar_t>
-{
-    static auto Load(const std::string& fileName, TemplateEnv* env)
-    {
-        return env->LoadTemplateW(fileName);
-    }
-};
-
 template<typename CharT>
 class GenericStreamWriter : public OutStream::StreamWriter
 {

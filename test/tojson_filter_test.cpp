@@ -52,7 +52,6 @@ struct ToJson : ::testing::Test
     void PerformBothJsonTests(const std::string& source, const std::string& expectedResult, const jinja2::ValuesMap& params)
     {
         PerformJsonTest<Template>(source, expectedResult, params);
-        PerformJsonTest<TemplateW>(ConvertString<std::wstring>(source), ConvertString<std::wstring>(expectedResult), params);
     }
 };
 
